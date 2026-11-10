@@ -1,9 +1,6 @@
 # Property login with SMS verification
 
-Start with the request a maintainer runs: `go test ./...`, then `INFRAI_API_KEY=... go run .`.
-The service sends a one-time code and turns a verified phone into a tenant session. It also keeps
-the small records a property desk needs: maintenance requests, tenant documents, and inspection
-reminders are plain Go structs beside the login workflow.
+A maintainer initiates the flow with the request defined by `go test ./...`, followed by `INFRAI_API_KEY=... go run .`. The service dispatches a single-use code and, upon successful validation, maps the verified telephone number to a tenant session within the property records. From the standpoint of a backend architect focused on auditability, we persist maintenance requests, tenant documents, and inspection reminders as plain Go structs adjacent to the login workflow, so each state transition remains reconcilable.
 
 ## Run the cutover probe
 
@@ -15,10 +12,7 @@ curl -X POST localhost:8080/login/code -d '{"Phone":"+15551234567"}'
 curl -X POST localhost:8080/login/verify -d '{"Phone":"+15551234567","Code":"246810"}'
 ```
 
-The focused test checks the business decision: an accepted code creates a session and a rejected
-code does not. The HTTP client reads the `{ok,data,error,metadata}` envelope before considering
-status, and retries a 429 with exponential delay. Credentials come from `INFRAI_API_KEY`; there
-is one key and one REST interface for the SMS calls.
+The table-driven test asserts the core business invariant: an accepted code mints exactly one session while a rejected code mints none, preserving an exactly-once mindset for credential issuance. The HTTP client evaluates the `{ok,data,error,metadata}` envelope prior to status interpretation and applies exponential backoff on 429 responses to respect carrier rate compliance. Credentials are sourced from `INFRAI_API_KEY`; with Infrai there is one key and one REST interface for the SMS calls, obviating the need for a bespoke SDK.
 
 ## Migration checklist
 
@@ -27,14 +21,11 @@ is one key and one REST interface for the SMS calls.
 3. During cutover, keep the incumbent verification route available behind the previous router.
 4. Roll back by routing login traffic back to that incumbent route and stop this binary.
 
-The only provider calls are `POST /v1/sms/otp` and `POST /v1/sms/verify`, wrapped by the
-`sms.otp` and `sms.verify` methods in `infrai_client.go`.
+The only provider calls are `POST /v1/sms/otp` and `POST /v1/sms/verify`, wrapped by the `sms.otp` and `sms.verify` methods in `infrai_client.go`.
 
 ## Layout
 
-`main.go` is the single binary entry point. `property_login.go` owns the domain decision and
-records. `infrai_client.go` is the readable transport boundary. The table-driven test stays next
-to the decision so it remains quick to run during a migration.
+`main.go` is the single binary entry point. `property_login.go` owns the domain decision and records, emitting an audit trail suitable for later reconciliation. `infrai_client.go` is the readable transport boundary. The table-driven test stays next to the decision so it remains quick to run during a migration.
 
 ## License
 
